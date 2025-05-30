@@ -3,9 +3,9 @@ requires = ["setuptools >= 61.0", "setuptools-scm>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "f5-tts"
+name = "f5r-tts"
 dynamic = ["version"]
-description = "F5-TTS: A Fairytaler that Fakes Fluent and Faithful Speech with Flow Matching"
+description = "F5R-TTS: Improving Flow Matching based Text-to-Speech with Group Relative Policy Optimization"
 readme = "README.md"
 license = {text = "MIT License"}
 classifiers = [
@@ -19,7 +19,9 @@ dependencies = [
     "cached_path",
     "click",
     "datasets",
+    "einops",
     "ema_pytorch>=0.5.2",
+    "funasr",
     "gradio>=3.45.2",
     "jieba",
     "librosa",
@@ -38,6 +40,7 @@ dependencies = [
     "transformers_stream_generator",
     "vocos",
     "wandb",
+    "wespeaker",
     "x_transformers>=1.31.14",
 ]
 
@@ -52,10 +55,5 @@ eval = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/SWivid/F5-TTS"
+Homepage = "https://github.com/shaw0fr/F5R-TTS"
 
-[project.scripts]
-"f5-tts_infer-cli" = "f5_tts.infer.infer_cli:main"
-"f5-tts_infer-gradio" = "f5_tts.infer.infer_gradio:main"
-"f5-tts_finetune-cli" = "f5_tts.train.finetune_cli:main"
-"f5-tts_finetune-gradio" = "f5_tts.train.finetune_gradio:main"

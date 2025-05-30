@@ -140,7 +140,7 @@ class CustomDataset(Dataset):
             if audio.shape[0] > 1:
                 audio = torch.mean(audio, dim=0, keepdim=True)
 
-            if duration > 30 or duration < 0.3:
+            if duration > 15 or duration < 0.3:
                 return self.__getitem__((index + 1) % len(self.data))
 
             if source_sample_rate != self.target_sample_rate:
@@ -160,19 +160,15 @@ class CustomDataset(Dataset):
 
 
 class DynamicBatchSampler(Sampler[list[int]]):
-    """Extension of Sampler that will do the following:
-    1.  Change the batch size (essentially number of sequences)
-        in a batch to ensure that the total number of frames are less
-        than a certain threshold.
-    2.  Make sure the padding efficiency in the batch is high.
-    """
-
     def __init__(
-        self, sampler: Sampler[int], frames_threshold: int, max_samples=0, random_seed=None, drop_last: bool = False
+        self, sampler: Sampler[int], frames_threshold: int, max_samples=0, random_seed=None, drop_last: bool = False,
+        repeat_count=1, mini_repeat_count=1
     ):
         self.sampler = sampler
         self.frames_threshold = frames_threshold
         self.max_samples = max_samples
+        self.repeat_count = repeat_count
+        self.mini_repeat_count = mini_repeat_count
 
         indices, batches = [], []
         data_source = self.sampler.data_source
@@ -212,7 +208,15 @@ class DynamicBatchSampler(Sampler[list[int]]):
         random.seed(random_seed)
         random.shuffle(batches)
 
-        self.batches = batches
+        # repeat
+        self.batches = []
+        for chunk in batches:
+            for _ in range(self.repeat_count):
+                batch_sub = []
+                for index in chunk:
+                    for _ in range(self.mini_repeat_count):
+                        batch_sub.append(index)
+                self.batches.append(batch_sub)
 
     def __iter__(self):
         return iter(self.batches)

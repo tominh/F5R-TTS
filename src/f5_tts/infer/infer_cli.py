@@ -38,6 +38,7 @@ parser.add_argument(
 parser.add_argument(
     "-p",
     "--ckpt_file",
+    required=True,
     help="The Checkpoint .pt",
 )
 parser.add_argument(
@@ -124,18 +125,6 @@ vocoder = load_vocoder(vocoder_name=mel_spec_type, is_local=args.load_vocoder_fr
 if model == "F5-TTS":
     model_cls = DiT
     model_cfg = dict(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512, conv_layers=4)
-    if ckpt_file == "":
-        if args.vocoder_name == "vocos":
-            repo_name = "F5-TTS"
-            exp_name = "F5TTS_Base"
-            ckpt_step = 1200000
-            ckpt_file = str(cached_path(f"hf://SWivid/{repo_name}/{exp_name}/model_{ckpt_step}.safetensors"))
-            # ckpt_file = f"ckpts/{exp_name}/model_{ckpt_step}.pt"  # .pt | .safetensors; local path
-        elif args.vocoder_name == "bigvgan":
-            repo_name = "F5-TTS"
-            exp_name = "F5TTS_Base_bigvgan"
-            ckpt_step = 1250000
-            ckpt_file = str(cached_path(f"hf://SWivid/{repo_name}/{exp_name}/model_{ckpt_step}.pt"))
 
 elif model == "E2-TTS":
     model_cls = UNetT

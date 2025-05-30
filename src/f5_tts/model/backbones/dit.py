@@ -10,9 +10,9 @@ d - dimension
 from __future__ import annotations
 
 import torch
-from torch import nn
 import torch.nn.functional as F
-
+from einops import repeat
+from torch import nn
 from x_transformers.x_transformers import RotaryEmbedding
 
 from f5_tts.model.modules import (
@@ -126,6 +126,7 @@ class DiT(nn.Module):
 
         self.norm_out = AdaLayerNormZero_Final(dim)  # final modulation
         self.proj_out = nn.Linear(dim, mel_dim)
+        self.proj_out_ln_sig = nn.Linear(dim, mel_dim)
 
     def forward(
         self,
@@ -159,5 +160,84 @@ class DiT(nn.Module):
 
         x = self.norm_out(x, t)
         output = self.proj_out(x)
+        output_ln_sig = self.proj_out_ln_sig(x)
+
+        return output, output_ln_sig
+
+    def inference(
+        self,
+        x,     # nosied input audio float['b n d']
+        cond,  # masked cond audio float['b n d']
+        text,  # text int['b nt']
+        time,  # time step float['b'] | float['']
+        drop_audio_cond,  # cfg for cond audio
+        drop_text,        # cfg for text
+        mask=None,  # bool['b n'] | None
+    ):
+        batch, seq_len = x.shape[0], x.shape[1]
+        if time.ndim == 0:
+            time = time.repeat(batch)
+
+        # t: conditioning time, c: context (text + masked cond audio), x: noised input audio
+        x = x.to(cond.dtype)
+        time = time.to(cond.dtype)
+        t = self.time_embed(time)
+        text_embed = self.text_embed(text, seq_len, drop_text=drop_text)
+        x = self.input_embed(x, cond, text_embed, drop_audio_cond=drop_audio_cond)
+
+        rope = self.rotary_embed.forward_from_seq_len(seq_len)
+
+        if self.long_skip_connection is not None:
+            residual = x
+
+        for block in self.transformer_blocks:
+            x = block(x, t, mask=mask, rope=rope)
+
+        if self.long_skip_connection is not None:
+            x = self.long_skip_connection(torch.cat((x, residual), dim=-1))
+
+        x = self.norm_out(x, t)
+        output = self.proj_out(x)
+        output_ln_sig = self.proj_out_ln_sig(x)
+        snd = torch.randn(output.size()).to(output.device)
+        output = output + snd * torch.exp(output_ln_sig)
 
         return output
+
+    def forward_rl(
+        self,
+        x,  # nosied input audio float['b n d']
+        cond,  # masked cond audio float['b n d']
+        text,  # text int['b nt']
+        time,  # time step float['b']
+        drop_audio_cond,  # cfg for cond audio
+        drop_text,   # cfg for text
+        mask=None,  # bool['b n'] | None
+    ):
+        batch, seq_len = x.shape[0], x.shape[1]
+        if time.ndim == 0:
+            time = repeat(time, ' -> b', b=batch)
+
+        # t: conditioning time, c: context (text + masked cond audio), x: noised input audio
+        t = self.time_embed(time)
+        text_embed = self.text_embed(text, seq_len, drop_text=drop_text)
+        x = self.input_embed(x, cond, text_embed, drop_audio_cond=drop_audio_cond)
+
+        rope = self.rotary_embed.forward_from_seq_len(seq_len)
+
+        if self.long_skip_connection is not None:
+            residual = x
+
+        for block in self.transformer_blocks:
+            x = block(x, t, mask=mask, rope=rope)
+
+        if self.long_skip_connection is not None:
+            x = self.long_skip_connection(torch.cat((x, residual), dim=-1))
+
+        x = self.norm_out(x, t)
+        output_mu = self.proj_out(x)
+        output_ln_sig = self.proj_out_ln_sig(x)
+        snd = torch.randn(output_mu.size()).to(output_mu.device)
+        output = output_mu + snd * torch.exp(output_ln_sig)
+
+        return output, output_mu, output_ln_sig

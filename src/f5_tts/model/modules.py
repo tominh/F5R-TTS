@@ -121,9 +121,9 @@ class MelSpec(nn.Module):
         self.target_sample_rate = target_sample_rate
 
         if mel_spec_type == "vocos":
-            self.extractor = get_vocos_mel_spectrogram
+            self.mel_stft = get_vocos_mel_spectrogram
         elif mel_spec_type == "bigvgan":
-            self.extractor = get_bigvgan_mel_spectrogram
+            self.mel_stft = get_bigvgan_mel_spectrogram
 
         self.register_buffer("dummy", torch.tensor(0), persistent=False)
 
@@ -131,7 +131,7 @@ class MelSpec(nn.Module):
         if self.dummy.device != wav.device:
             self.to(wav.device)
 
-        mel = self.extractor(
+        mel = self.mel_stft(
             waveform=wav,
             n_fft=self.n_fft,
             n_mel_channels=self.n_mel_channels,

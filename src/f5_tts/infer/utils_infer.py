@@ -119,12 +119,16 @@ def load_vocoder(vocoder_name="vocos", is_local=False, local_path="", device=dev
 asr_pipe = None
 
 
-def initialize_asr_pipeline(device=device):
+def initialize_asr_pipeline(device=device, dtype=None):
+    if dtype is None:
+        dtype = (
+            torch.float16 if device == "cuda" and torch.cuda.get_device_properties(device).major >= 6 else torch.float32
+        )
     global asr_pipe
     asr_pipe = pipeline(
         "automatic-speech-recognition",
         model="openai/whisper-large-v3-turbo",
-        torch_dtype=torch.float16,
+        torch_dtype=dtype,
         device=device,
     )
 
@@ -156,6 +160,7 @@ def load_checkpoint(model, ckpt_path, device, dtype=None, use_ema=True):
             if k not in ["initted", "step"]
         }
 
+        # patch for backward compatibility, 305e3ea
         for key in ["mel_spec.mel_stft.mel_scale.fb", "mel_spec.mel_stft.spectrogram.window"]:
             if key in checkpoint["model_state_dict"]:
                 del checkpoint["model_state_dict"][key]
@@ -213,6 +218,22 @@ def load_model(
     return model
 
 
+def remove_silence_edges(audio, silence_threshold=-42):
+    # Remove silence from the start
+    non_silent_start_idx = silence.detect_leading_silence(audio, silence_threshold=silence_threshold)
+    audio = audio[non_silent_start_idx:]
+
+    # Remove silence from the end
+    non_silent_end_duration = audio.duration_seconds
+    for ms in reversed(audio):
+        if ms.dBFS > silence_threshold:
+            break
+        non_silent_end_duration -= 0.001
+    trimmed_audio = audio[: int(non_silent_end_duration * 1000)]
+
+    return trimmed_audio
+
+
 # preprocess reference audio and text
 
 
@@ -224,7 +245,7 @@ def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_in
         if clip_short:
             # 1. try to find long silence for clipping
             non_silent_segs = silence.split_on_silence(
-                aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=1000
+                aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=1000, seek_step=10
             )
             non_silent_wave = AudioSegment.silent(duration=0)
             for non_silent_seg in non_silent_segs:
@@ -236,7 +257,7 @@ def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_in
             # 2. try to find short silence for clipping if 1. failed
             if len(non_silent_wave) > 15000:
                 non_silent_segs = silence.split_on_silence(
-                    aseg, min_silence_len=100, silence_thresh=-40, keep_silence=1000
+                    aseg, min_silence_len=100, silence_thresh=-40, keep_silence=1000, seek_step=10
                 )
                 non_silent_wave = AudioSegment.silent(duration=0)
                 for non_silent_seg in non_silent_segs:
@@ -252,6 +273,7 @@ def preprocess_ref_audio_text(ref_audio_orig, ref_text, clip_short=True, show_in
                 aseg = aseg[:15000]
                 show_info("Audio is over 15s, clipping short. (3)")
 
+        aseg = remove_silence_edges(aseg) + AudioSegment.silent(duration=50)
         aseg.export(f.name, format="wav")
         ref_audio = f.name
 
@@ -468,7 +490,9 @@ def infer_batch_process(
 
 def remove_silence_for_generated_wav(filename):
     aseg = AudioSegment.from_file(filename)
-    non_silent_segs = silence.split_on_silence(aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=500)
+    non_silent_segs = silence.split_on_silence(
+        aseg, min_silence_len=1000, silence_thresh=-50, keep_silence=500, seek_step=10
+    )
     non_silent_wave = AudioSegment.silent(duration=0)
     for non_silent_seg in non_silent_segs:
         non_silent_wave += non_silent_seg

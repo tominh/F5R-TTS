@@ -303,7 +303,9 @@ class Trainer:
                 global_step += 1
 
                 if self.accelerator.is_local_main_process:
-                    self.accelerator.log({"loss": loss.item(), "lr": self.scheduler.get_last_lr()[0]}, step=global_step)
+                    self.accelerator.log(
+                        {"loss": loss.item(), "lr": self.scheduler.get_last_lr()[0]}, step=global_step
+                    )
                     if self.logger == "tensorboard":
                         self.writer.add_scalar("loss", loss.item(), global_step)
                         self.writer.add_scalar("lr", self.scheduler.get_last_lr()[0], global_step)
@@ -315,7 +317,9 @@ class Trainer:
 
                     if self.log_samples and self.accelerator.is_local_main_process:
                         ref_audio, ref_audio_len = vocoder.decode(batch["mel"][0].unsqueeze(0)), mel_lengths[0]
-                        torchaudio.save(f"{log_samples_path}/step_{global_step}_ref.wav", ref_audio, target_sample_rate)
+                        torchaudio.save(
+                            f"{log_samples_path}/step_{global_step}_ref.wav", ref_audio.cpu(), target_sample_rate
+                        )
                         with torch.inference_mode():
                             generated, _ = self.accelerator.unwrap_model(self.model).sample(
                                 cond=mel_spec[0][:ref_audio_len].unsqueeze(0),
@@ -326,8 +330,12 @@ class Trainer:
                                 sway_sampling_coef=sway_sampling_coef,
                             )
                         generated = generated.to(torch.float32)
-                        gen_audio = vocoder.decode(generated[:, ref_audio_len:, :].permute(0, 2, 1).cpu())
-                        torchaudio.save(f"{log_samples_path}/step_{global_step}_gen.wav", gen_audio, target_sample_rate)
+                        gen_audio = vocoder.decode(
+                            generated[:, ref_audio_len:, :].permute(0, 2, 1).to(self.accelerator.device)
+                        )
+                        torchaudio.save(
+                            f"{log_samples_path}/step_{global_step}_gen.wav", gen_audio.cpu(), target_sample_rate
+                        )
 
                 if global_step % self.last_per_steps == 0:
                     self.save_checkpoint(global_step, last=True)
