@@ -71,16 +71,17 @@ python ./src/f5_tts/infer/infer_cli.py \
 
 ## Training
 
+You can download [SenseVoice_small](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) and [wespeaker](https://wenet.org.cn/downloads?models=wespeaker&version=cnceleb_resnet34.zip) for GRPO phase.
 ```bash
 accelerate config
 
-# stage 0 for data preparing
+# Data preparing
 python src/f5_tts/train/datasets/prepare_emilia.py
 
-# stage 1 for pretraining
+# Pretraining phase
 accelerate launch rc/f5_tts/train/train.py
 
-# stage 2 for GRPO
+# GRPO phase
 accelerate launch rc/f5_tts/train/train_rl.py
 ```
 
