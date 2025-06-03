@@ -72,6 +72,7 @@ python ./src/f5_tts/infer/infer_cli.py \
 ## Training
 
 You can download [SenseVoice_small](https://huggingface.co/FunAudioLLM/SenseVoiceSmall) and [wespeaker](https://wenet.org.cn/downloads?models=wespeaker&version=cnceleb_resnet34.zip) for GRPO phase.
+If you want to use our code directly, you need to place the reference model in `ckpts/F5TTS_ref`. if not, you can change the loading method in `src/rl/trainer_rl.py`.
 ```bash
 accelerate config
 
