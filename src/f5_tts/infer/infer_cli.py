@@ -82,6 +82,11 @@ parser.add_argument(
     default=1.0,
     help="Adjust the speed of the audio generation (default: 1.0)",
 )
+parser.add_argument(
+    "--device",
+    type=str,
+    help="Specify the device to run on",
+)
 args = parser.parse_args()
 
 config = tomli.load(open(args.config, "rb"))
@@ -110,6 +115,7 @@ ckpt_file = args.ckpt_file if args.ckpt_file else ""
 vocab_file = args.vocab_file if args.vocab_file else ""
 remove_silence = args.remove_silence if args.remove_silence else config["remove_silence"]
 speed = args.speed
+device = args.device or config.get("device", "cpu")
 wave_path = Path(output_dir) / "infer_cli_out.wav"
 # spectrogram_path = Path(output_dir) / "infer_cli_out.png"
 if args.vocoder_name == "vocos":
@@ -118,7 +124,13 @@ elif args.vocoder_name == "bigvgan":
     vocoder_local_path = "../checkpoints/bigvgan_v2_24khz_100band_256x"
 mel_spec_type = args.vocoder_name
 
-vocoder = load_vocoder(vocoder_name=mel_spec_type, is_local=args.load_vocoder_from_local, local_path=vocoder_local_path)
+print("Using device:", device)
+vocoder = load_vocoder(
+    vocoder_name=mel_spec_type, 
+    is_local=args.load_vocoder_from_local, 
+    local_path=vocoder_local_path,
+    device=device,
+)
 
 
 # load models
@@ -143,7 +155,14 @@ elif model == "E2-TTS":
 
 
 print(f"Using {model}...")
-ema_model = load_model(model_cls, model_cfg, ckpt_file, mel_spec_type=args.vocoder_name, vocab_file=vocab_file)
+ema_model = load_model(
+    model_cls, 
+    model_cfg, 
+    ckpt_file, 
+    mel_spec_type=args.vocoder_name, 
+    vocab_file=vocab_file,
+    device=device,
+)
 
 
 def main_process(ref_audio, ref_text, text_gen, model_obj, mel_spec_type, remove_silence, speed):

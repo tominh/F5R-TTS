@@ -183,3 +183,69 @@ def repetition_found(text, length=2, tolerance=10):
         if count > tolerance:
             return True
     return False
+
+# def load_checkpoint(checkpoint_path, device):
+#     print(f"Loading checkpoint from {checkpoint_path} ...")
+#     if not exists(checkpoint_path):
+#         return 0
+#     if not os.path.exists(checkpoint_path):
+#         return 0
+#     if not os.listdir(checkpoint_path):
+#         return 0
+
+#     if "model_last.pt" in os.listdir(checkpoint_path):
+#         latest_checkpoint = "model_last.pt"
+#     else:
+#         latest_checkpoint = sorted(
+#             [f for f in os.listdir(checkpoint_path) if f.endswith('.pt')],
+#             key=lambda x: int(''.join(filter(str.isdigit, x)))
+#         )[-1]
+#     checkpoint = torch.load(f"{checkpoint_path}/{latest_checkpoint}", weights_only=True, map_location=device)
+
+#     return checkpoint
+
+def load_checkpoint(model, device: str, dtype=None, use_ema=False):
+    ckpt_path = str(files("f5_tts").joinpath(f"../../ckpts/F5TTS_Base_rl/model_last.pt"))
+    print("ckpt_path:", ckpt_path)
+    if dtype is None:
+        dtype = (
+            torch.float16
+            if "cuda" in device
+            and torch.cuda.get_device_properties(device).major >= 7
+            and not torch.cuda.get_device_name().endswith("[ZLUDA]")
+            else torch.float32
+        )
+    model = model.to(dtype)
+
+    ckpt_type = ckpt_path.split(".")[-1]
+    if ckpt_type == "safetensors":
+        from safetensors.torch import load_file
+
+        checkpoint = load_file(ckpt_path, device=device)
+    else:
+        checkpoint = torch.load(ckpt_path, map_location=device, weights_only=True)
+
+    if use_ema:
+        if ckpt_type == "safetensors":
+            checkpoint = {"ema_model_state_dict": checkpoint}
+        checkpoint["model_state_dict"] = {
+            k.replace("ema_model.", ""): v
+            for k, v in checkpoint["ema_model_state_dict"].items()
+            if k not in ["initted", "step"]
+        }
+
+        # patch for backward compatibility, 305e3ea
+        for key in ["mel_spec.mel_stft.mel_scale.fb", "mel_spec.mel_stft.spectrogram.window"]:
+            if key in checkpoint["model_state_dict"]:
+                del checkpoint["model_state_dict"][key]
+
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+    else:
+        if ckpt_type == "safetensors":
+            checkpoint = {"model_state_dict": checkpoint}
+        model.load_state_dict(checkpoint["model_state_dict"], strict=False)
+
+    del checkpoint
+    torch.cuda.empty_cache()
+
+    return model.to(device)

@@ -6,15 +6,13 @@ from tqdm import tqdm
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.data
 from accelerate import Accelerator
 from accelerate.utils import DistributedDataParallelKwargs
 from einops import rearrange
 from ema_pytorch import EMA
 from f5_tts.model import CFM, DiT
 from f5_tts.model.dataset import DynamicBatchSampler, collate_fn
-from f5_tts.model.utils import (default, exists, get_tokenizer,
-                                load_checkpoint, mask_from_start_end_indices)
+from f5_tts.model.utils import (default, exists, get_tokenizer, mask_from_start_end_indices, load_checkpoint)
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LinearLR, SequentialLR
 from torch.utils.data import DataLoader, Dataset, SequentialSampler
@@ -40,7 +38,6 @@ def load_model(repo_name, exp_name, model_cls, model_cfg, ckpt_step):
         if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
-    ckpt_path = f"ckpts/{exp_name}/model_{ckpt_step}.pt"  # .pt | .safetensors
     vocab_char_map, vocab_size = get_tokenizer("Emilia_ZH_EN", "pinyin")
     target_sample_rate = 24000
     n_mel_channels = 100
@@ -61,7 +58,7 @@ def load_model(repo_name, exp_name, model_cls, model_cfg, ckpt_step):
         vocab_char_map=vocab_char_map,
     ).to(device)
 
-    model = load_checkpoint(model, ckpt_path, device, use_ema=True)
+    model = load_checkpoint(model, device)
 
     return model
 
@@ -87,8 +84,8 @@ class GRPOTrainer():
         wandb_run_name="test_run",
         wandb_resume_id: str = None,
         last_per_steps=None,
-        accelerate_kwargs: dict = None,
-        ema_kwargs: dict = None
+        accelerate_kwargs: dict = dict(),
+        ema_kwargs: dict = dict()
     ):
 
         ddp_kwargs = DistributedDataParallelKwargs(find_unused_parameters=True)
